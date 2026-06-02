@@ -3,843 +3,815 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>한국 수화 인식기</title>
+<title>KSL — 수화 AI</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap');
-
 :root {
-  --bg: #f5f0e8;
-  --panel: #ede8df;
-  --card: #fff;
-  --border: #d8d0c4;
-  --accent: #e8532a;
-  --accent2: #2a6ee8;
-  --accent3: #2ab87a;
-  --text: #1a1612;
-  --muted: #8a8078;
-  --success: #2ab87a;
-  --warn: #e8a82a;
-  --shadow: rgba(26,22,18,0.1);
+  --bg:#0c0c10; --panel:#13131c; --card:#1a1a26;
+  --border:#252535; --accent:#7c6dfa; --green:#3dd68c;
+  --red:#fa6d6d; --yellow:#fac96d; --text:#eeeef5; --muted:#6060780;
 }
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
 
-* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* ── 탭 네비 ── */
+nav{display:flex;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:13px 4px;background:transparent;border:none;border-bottom:2px solid transparent;color:#6060780;color:var(--muted);font-size:13px;font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-icon{font-size:16px}
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
-  height: 100dvh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
+/* ── 페이지 ── */
+.page{flex:1;overflow:hidden;display:none;flex-direction:column}
+.page.active{display:flex}
 
-/* ── 헤더 ── */
-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  background: var(--text);
-  flex-shrink: 0;
-}
-.logo {
-  font-family: 'DM Mono', monospace;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--bg);
-  letter-spacing: -0.5px;
-}
-.logo span { color: var(--accent); }
-.header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: rgba(255,255,255,0.1);
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
-  font-family: 'DM Mono', monospace;
-}
-.status-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--warn);
-  animation: blink 1.5s infinite;
-}
-.status-dot.on { background: var(--success); animation: none; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+/* ════════════════════════════════
+   PAGE 1: 수집
+════════════════════════════════ */
+.collect-layout{display:flex;flex:1;overflow:hidden}
 
-/* ── 메인 ── */
-main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  gap: 0;
-}
+.word-panel{width:200px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.wp-header{padding:11px 13px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.word-list{flex:1;overflow-y:auto;padding:6px}
+.word-list::-webkit-scrollbar{width:3px}
+.word-list::-webkit-scrollbar-thumb{background:var(--border)}
+.wbtn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 9px;background:transparent;border:1.5px solid transparent;border-radius:9px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:12px;cursor:pointer;margin-bottom:3px;transition:all .15s;text-align:left}
+.wbtn:hover{background:var(--card);border-color:var(--border)}
+.wbtn.active{background:var(--card);border-color:var(--accent)}
+.wbtn.done{border-color:var(--green)}
+.wemoji{font-size:16px;flex-shrink:0}
+.wname{flex:1;font-weight:600}
+.wcnt{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted)}
+.wbtn.done .wcnt{color:var(--green)}
+.wp-bottom{padding:10px;border-top:1px solid var(--border)}
+.total-txt{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;text-align:center;margin-bottom:7px}
+.dl-btn{width:100%;padding:9px;background:var(--accent);border:none;border-radius:9px;color:white;font-size:12px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer}
+.dl-btn:disabled{opacity:.3;cursor:not-allowed}
 
-/* ── 왼쪽 가이드 ── */
-.guide {
-  width: 260px;
-  flex-shrink: 0;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+.cam-section{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.cam-wrap{flex:1;position:relative;background:#050508;overflow:hidden}
+#videoEl{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+#canvasEl{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
 
-.guide-top {
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--border);
-}
-.guide-top h2 {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-}
+.top-badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:22px;padding:7px 18px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.badge-emoji{font-size:20px}
+.badge-word{font-size:16px;font-weight:700}
+.badge-hint{font-size:10px;color:var(--muted)}
 
-.sign-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.sign-list::-webkit-scrollbar { width: 3px; }
-.sign-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.no-hand{position:absolute;top:58px;left:50%;transform:translateX(-50%);background:rgba(250,109,109,.15);border:1px solid rgba(250,109,109,.4);border-radius:10px;padding:5px 14px;font-size:11px;color:var(--red);opacity:0;transition:opacity .3s;white-space:nowrap}
+.no-hand.show{opacity:1}
 
-.sign-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--card);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.18s;
-  position: relative;
-}
-.sign-item:active { transform: scale(0.98); }
-.sign-item.active {
-  border-color: var(--accent);
-  background: #fff8f6;
-}
-.sign-item.detected {
-  border-color: var(--success);
-  background: #f0fdf6;
-  animation: pop 0.35s ease;
-}
-@keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.03)} 100%{transform:scale(1)} }
+.prog-wrap{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px}
+.prog-svg{transform:rotate(-90deg)}
+.prog-bg{fill:none;stroke:rgba(255,255,255,.1);stroke-width:6}
+.prog-fill{fill:none;stroke:var(--green);stroke-width:6;stroke-linecap:round;stroke-dasharray:251;stroke-dashoffset:251;transition:stroke-dashoffset .3s}
+.prog-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:900;font-family:'DM Mono',monospace}
+.prog-lbl{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace}
 
-.sign-icon { font-size: 26px; line-height: 1; flex-shrink: 0; }
-.sign-info { flex: 1; min-width: 0; }
-.sign-word {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-}
-.sign-how {
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 1px;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sign-check {
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: var(--success);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px;
-  color: white;
-  opacity: 0;
-  transition: opacity 0.2s;
-  flex-shrink: 0;
-}
-.sign-item.detected .sign-check { opacity: 1; }
+.capture-btn{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:white;border:4px solid rgba(255,255,255,.25);cursor:pointer;font-size:26px;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .1s;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.capture-btn:active{transform:translateX(-50%) scale(.9);background:var(--green)}
 
-/* 카테고리 구분선 */
-.cat-divider {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 8px 4px 4px;
-}
+.auto-wrap{position:absolute;bottom:24px;right:16px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.auto-lbl{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace}
+.toggle{width:42px;height:24px;background:var(--border);border-radius:12px;border:none;cursor:pointer;position:relative;transition:background .2s}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;width:18px;height:18px;background:white;border-radius:50%;top:3px;left:3px;transition:left .2s}
+.toggle.on::after{left:21px}
 
-/* 팁 */
-.tip-box {
-  padding: 12px 14px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  min-height: 70px;
-}
-.tip-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--muted);
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
-.tip-text {
-  font-size: 11px;
-  color: var(--text);
-  line-height: 1.6;
-}
+.flash{position:absolute;inset:0;background:white;opacity:0;pointer-events:none;transition:opacity .08s}
+.flash.pop{opacity:.35}
+.done-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);background:var(--green);color:#0c0c10;font-size:18px;font-weight:900;padding:14px 28px;border-radius:18px;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap}
+.done-badge.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 
-/* ── 오른쪽 캠 ── */
-.cam-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
-}
-
-.cam-wrap {
-  flex: 1;
-  position: relative;
-  background: #111;
-  overflow: hidden;
-}
-
-#videoEl {
-  position: absolute;
-  width: 1px; height: 1px;
-  opacity: 0; pointer-events: none;
-}
-
-#canvasEl {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-  display: block;
-}
-
-/* 손 수 표시 */
-.hand-count {
-  position: absolute;
-  top: 14px; left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 24px;
-  padding: 7px 16px;
-  font-size: 12px;
-  color: rgba(255,255,255,0.6);
-  font-family: 'DM Mono', monospace;
-  transition: all 0.3s;
-  white-space: nowrap;
-}
-.hand-count.has-hands {
-  color: var(--success);
-  border-color: rgba(42,184,122,0.4);
-}
-.hand-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-/* 손 라벨 (L/R) */
-.hand-label-badge {
-  position: absolute;
-  background: var(--accent2);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'DM Mono', monospace;
-  padding: 3px 8px;
-  border-radius: 6px;
-  pointer-events: none;
-  transform: translate(-50%, -130%);
-  white-space: nowrap;
-}
-
-/* 결과 표시 */
-.result-box {
-  position: absolute;
-  bottom: 20px; left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  pointer-events: none;
-}
-.result-word {
-  font-size: 52px;
-  font-weight: 900;
-  color: white;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.5);
-  opacity: 0;
-  transform: translateY(8px) scale(0.95);
-  transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
-  white-space: nowrap;
-}
-.result-word.show {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-.result-sub {
-  font-size: 12px;
-  color: rgba(255,255,255,0.55);
-  font-family: 'DM Mono', monospace;
-  opacity: 0;
-  transition: opacity 0.25s;
-}
-.result-sub.show { opacity: 1; }
-
-/* 코너 프레임 */
-.frame-tl, .frame-tr, .frame-bl, .frame-br {
-  position: absolute;
-  width: 28px; height: 28px;
-  border-color: rgba(255,255,255,0.3);
-  border-style: solid;
-}
-.frame-tl { top: 36px; left: 20px; border-width: 2px 0 0 2px; }
-.frame-tr { top: 36px; right: 20px; border-width: 2px 2px 0 0; }
-.frame-bl { bottom: 70px; left: 20px; border-width: 0 0 2px 2px; }
-.frame-br { bottom: 70px; right: 20px; border-width: 0 2px 2px 0; }
+.cam-bottom{height:50px;background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0}
+.cam-bottom-info{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace}
+.undo-btn{margin-left:auto;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Noto Sans KR',sans-serif}
 
 /* 시작 오버레이 */
-.start-overlay {
-  position: absolute; inset: 0;
-  background: rgba(26,22,18,0.92);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 16px; z-index: 20;
-}
-.start-overlay.gone { display: none; }
-.spinner {
-  width: 36px; height: 36px;
-  border: 2.5px solid rgba(255,255,255,0.15);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.load-msg { font-size: 13px; color: rgba(255,255,255,0.5); }
-.start-btn {
-  padding: 15px 44px;
-  background: var(--accent);
-  border: none; border-radius: 14px;
-  color: white; font-size: 17px; font-weight: 700;
-  font-family: 'Noto Sans KR', sans-serif;
-  cursor: pointer;
-  box-shadow: 0 8px 28px rgba(232,83,42,0.4);
-  display: none;
-  transition: transform 0.15s;
-}
-.start-btn:active { transform: scale(0.96); }
-.hint-msg { font-size: 11px; color: rgba(255,255,255,0.3); display: none; }
+.start-overlay{position:absolute;inset:0;background:rgba(12,12,15,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;z-index:20}
+.start-overlay.gone{display:none}
+.spinner{width:32px;height:32px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-msg{font-size:13px;color:var(--muted)}
+.start-btn{padding:13px 36px;background:var(--accent);border:none;border-radius:13px;color:white;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;display:none;box-shadow:0 6px 22px rgba(124,109,250,.4)}
+.start-btn:active{opacity:.85}
 
-/* 히스토리 */
-.history {
-  height: 50px;
-  background: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  overflow-x: auto;
-  flex-shrink: 0;
-}
-.history::-webkit-scrollbar { height: 0; }
-.hist-label { font-size: 10px; color: rgba(255,255,255,0.3); white-space: nowrap; flex-shrink: 0; font-family: 'DM Mono', monospace; }
-.hist-chip {
-  flex-shrink: 0;
-  padding: 4px 12px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 16px;
-  font-size: 13px;
-  font-weight: 700;
-  color: white;
-  animation: chipIn 0.25s ease;
-}
-@keyframes chipIn { from{transform:scale(0.7);opacity:0} to{transform:scale(1);opacity:1} }
-.clear-btn {
-  margin-left: auto; flex-shrink: 0;
-  padding: 4px 10px;
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 6px; color: rgba(255,255,255,0.3);
-  font-size: 10px; cursor: pointer;
-  font-family: 'Noto Sans KR', sans-serif;
-}
+/* ════════════════════════════════
+   PAGE 2: 학습
+════════════════════════════════ */
+.train-page{padding:20px;overflow-y:auto;gap:16px}
+.train-page::-webkit-scrollbar{width:4px}
+.train-page::-webkit-scrollbar-thumb{background:var(--border)}
+
+.section-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px}
+.section-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+
+.upload-area{border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:all .2s}
+.upload-area:hover{border-color:var(--accent);background:rgba(124,109,250,.05)}
+.upload-area.has-file{border-color:var(--green);background:rgba(61,214,140,.05)}
+.upload-icon{font-size:32px;margin-bottom:8px}
+.upload-txt{font-size:13px;color:var(--muted)}
+.upload-name{font-size:12px;color:var(--green);margin-top:4px;font-family:'DM Mono',monospace}
+#fileInput{display:none}
+
+.data-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.stat-chip{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.stat-label{font-size:10px;color:var(--muted);margin-bottom:3px}
+.stat-val{font-size:16px;font-weight:700;font-family:'DM Mono',monospace}
+
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.config-item label{font-size:11px;color:var(--muted);display:block;margin-bottom:5px}
+.config-item input{width:100%;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px}
+.config-item input:focus{outline:none;border-color:var(--accent)}
+
+.train-btn{width:100%;padding:14px;background:var(--accent);border:none;border-radius:12px;color:white;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;margin-top:4px;transition:opacity .15s}
+.train-btn:disabled{opacity:.3;cursor:not-allowed}
+.train-btn:active{opacity:.85}
+
+.log-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;height:160px;overflow-y:auto;font-family:'DM Mono',monospace;font-size:11px;line-height:1.7}
+.log-box::-webkit-scrollbar{width:3px}
+.log-box::-webkit-scrollbar-thumb{background:var(--border)}
+.log-line{color:var(--muted)}
+.log-line.info{color:var(--text)}
+.log-line.success{color:var(--green)}
+.log-line.warn{color:var(--yellow)}
+
+.epoch-bar-wrap{height:6px;background:var(--card);border-radius:3px;overflow:hidden;margin:10px 0 4px}
+.epoch-bar{height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .3s}
+.epoch-txt{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;text-align:right}
+
+.model-dl-btn{width:100%;padding:12px;background:var(--green);border:none;border-radius:12px;color:#0c0c10;font-size:14px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;display:none;margin-top:8px}
+
+/* ════════════════════════════════
+   PAGE 3: 인식
+════════════════════════════════ */
+.recog-layout{display:flex;flex:1;overflow:hidden}
+
+.recog-side{width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;padding:14px}
+.recog-side h3{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+
+.model-load-area{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:12px}
+.model-load-area:hover{border-color:var(--accent)}
+.model-load-area.loaded{border-color:var(--green);background:rgba(61,214,140,.05)}
+#modelInput{display:none}
+
+.recog-word-list{flex:1;overflow-y:auto}
+.recog-word-list::-webkit-scrollbar{width:3px}
+.recog-word-list::-webkit-scrollbar-thumb{background:var(--border)}
+.rwitem{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;font-size:12px;transition:all .2s;margin-bottom:2px}
+.rwitem.highlight{background:rgba(61,214,140,.15);color:var(--green)}
+.rw-bar-wrap{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.rw-bar{height:100%;background:var(--green);border-radius:2px;width:0%;transition:width .15s}
+
+.recog-cam{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.recog-cam-wrap{flex:1;position:relative;background:#050508;overflow:hidden}
+#canvasR{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+
+.recog-result{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px}
+.recog-word-big{font-size:50px;font-weight:900;color:white;text-shadow:0 0 30px rgba(124,109,250,.6);opacity:0;transform:translateY(8px) scale(.95);transition:all .25s cubic-bezier(.34,1.56,.64,1);white-space:nowrap}
+.recog-word-big.show{opacity:1;transform:translateY(0) scale(1)}
+.recog-sub{font-size:11px;color:rgba(255,255,255,.45);font-family:'DM Mono',monospace;opacity:0;transition:opacity .25s}
+.recog-sub.show{opacity:1}
+
+.recog-hist{height:50px;background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 14px;overflow-x:auto;flex-shrink:0}
+.recog-hist::-webkit-scrollbar{height:0}
+.hist-lbl{font-size:10px;color:var(--muted);white-space:nowrap;font-family:'DM Mono',monospace}
+.hchip{flex-shrink:0;padding:4px 10px;background:var(--card);border:1px solid var(--border);border-radius:14px;font-size:12px;font-weight:700;animation:chipIn .25s ease}
+@keyframes chipIn{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+.hclear{margin-left:auto;flex-shrink:0;padding:4px 9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif}
+
+.no-model-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:20px}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">✋ <span>KSL</span>.ai</div>
-  <div class="header-right">
-    <div class="status-pill">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">준비 중</span>
-    </div>
-  </div>
-</header>
+<nav>
+  <button class="tab active" onclick="showPage('collect')"><span class="tab-icon">✊</span> 수집</button>
+  <button class="tab" onclick="showPage('train')"><span class="tab-icon">🧠</span> 학습</button>
+  <button class="tab" onclick="showPage('recog')"><span class="tab-icon">👁️</span> 인식</button>
+</nav>
 
-<main>
-  <!-- 왼쪽 가이드 -->
-  <div class="guide">
-    <div class="guide-top"><h2>📖 수화 사전</h2></div>
-    <div class="sign-list" id="signList"></div>
-    <div class="tip-box">
-      <div class="tip-label">💡 동작 설명</div>
-      <div class="tip-text" id="tipText">카드를 눌러 설명을 확인하세요.</div>
-    </div>
-  </div>
-
-  <!-- 오른쪽 카메라 -->
-  <div class="cam-area">
-    <div class="cam-wrap">
-      <video id="videoEl" playsinline autoplay muted></video>
-      <canvas id="canvasEl"></canvas>
-
-      <div class="frame-tl"></div>
-      <div class="frame-tr"></div>
-      <div class="frame-bl"></div>
-      <div class="frame-br"></div>
-
-      <div class="hand-count" id="handCount">
-        <div class="hand-dot"></div>
-        손을 카메라에 보여주세요
-      </div>
-
-      <div class="result-box">
-        <div class="result-word" id="resultWord"></div>
-        <div class="result-sub" id="resultSub"></div>
-      </div>
-
-      <div class="start-overlay" id="startOverlay">
-        <div class="spinner" id="spinner"></div>
-        <p class="load-msg" id="loadMsg">MediaPipe 로딩 중...</p>
-        <button class="start-btn" id="startBtn" onclick="startCamera()">📷 카메라 시작</button>
-        <p class="hint-msg" id="hintMsg">카메라 권한을 허용해 주세요</p>
+<!-- ══ PAGE 1: 수집 ══ -->
+<div class="page active" id="page-collect">
+  <div class="collect-layout">
+    <div class="word-panel">
+      <div class="wp-header">수화 단어</div>
+      <div class="word-list" id="wordList"></div>
+      <div class="wp-bottom">
+        <div class="total-txt" id="totalTxt">총 0개</div>
+        <button class="dl-btn" id="dlBtn" onclick="downloadDataset()" disabled>📥 JSON 저장</button>
       </div>
     </div>
-
-    <div class="history">
-      <span class="hist-label">기록:</span>
-      <div id="histChips" style="display:flex;gap:6px;align-items:center;"></div>
-      <button class="clear-btn" onclick="clearHist()">지우기</button>
+    <div class="cam-section">
+      <div class="cam-wrap">
+        <video id="videoEl" playsinline autoplay muted></video>
+        <canvas id="canvasEl"></canvas>
+        <div class="top-badge">
+          <span class="badge-emoji" id="badgeEmoji">👆</span>
+          <div>
+            <div class="badge-word" id="badgeWord">단어 선택</div>
+            <div class="badge-hint" id="badgeHint">왼쪽에서 선택하세요</div>
+          </div>
+        </div>
+        <div class="no-hand" id="noHand">⚠️ 손이 안 보여요</div>
+        <div class="prog-wrap" id="progWrap" style="opacity:.3">
+          <div style="position:relative;width:76px;height:76px">
+            <svg class="prog-svg" width="76" height="76">
+              <circle class="prog-bg" cx="38" cy="38" r="32"/>
+              <circle class="prog-fill" id="progFill" cx="38" cy="38" r="32"/>
+            </svg>
+            <div class="prog-num" id="progNum">0</div>
+          </div>
+          <div class="prog-lbl" id="progLbl">/ 100</div>
+        </div>
+        <button class="capture-btn" id="captureBtn" onclick="captureFrame()">✊</button>
+        <div class="auto-wrap">
+          <div class="auto-lbl">자동</div>
+          <button class="toggle" id="autoToggle" onclick="toggleAuto()"></button>
+        </div>
+        <div class="flash" id="flash"></div>
+        <div class="done-badge" id="doneBadge">✅ 완료!</div>
+        <div class="start-overlay" id="startOverlay">
+          <div class="spinner" id="spinner"></div>
+          <p class="load-msg" id="loadMsg">MediaPipe 로딩 중...</p>
+          <button class="start-btn" id="startBtn" onclick="startCamera()">📷 카메라 시작</button>
+        </div>
+      </div>
+      <div class="cam-bottom">
+        <span class="cam-bottom-info" id="camInfo">단어를 선택하고 수화를 보여주세요</span>
+        <button class="undo-btn" onclick="undoLast()">↩ 취소</button>
+      </div>
     </div>
   </div>
-</main>
+</div>
+
+<!-- ══ PAGE 2: 학습 ══ -->
+<div class="page" id="page-train">
+  <div class="train-page">
+
+    <div class="section-card">
+      <div class="section-title">📂 데이터 불러오기</div>
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📁</div>
+        <div class="upload-txt">JSON 파일을 선택하거나<br>수집 탭에서 바로 학습도 가능</div>
+        <div class="upload-name" id="uploadName"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".json" onchange="loadDataFile(event)">
+      <div class="data-stats" id="dataStats" style="display:none">
+        <div class="stat-chip"><div class="stat-label">단어 수</div><div class="stat-val" id="statWords">0</div></div>
+        <div class="stat-chip"><div class="stat-label">총 샘플</div><div class="stat-val" id="statSamples">0</div></div>
+        <div class="stat-chip"><div class="stat-label">최소 샘플</div><div class="stat-val" id="statMin">0</div></div>
+        <div class="stat-chip"><div class="stat-label">최대 샘플</div><div class="stat-val" id="statMax">0</div></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title">⚙️ 학습 설정</div>
+      <div class="config-grid">
+        <div class="config-item"><label>에포크 (반복)</label><input type="number" id="cfgEpochs" value="80" min="10" max="300"></div>
+        <div class="config-item"><label>배치 크기</label><input type="number" id="cfgBatch" value="32" min="8" max="128"></div>
+        <div class="config-item"><label>학습률</label><input type="number" id="cfgLr" value="0.001" step="0.0001" min="0.0001" max="0.01"></div>
+        <div class="config-item"><label>검증 비율</label><input type="number" id="cfgVal" value="0.2" step="0.05" min="0.1" max="0.4"></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title">🚀 학습 시작</div>
+      <div class="epoch-bar-wrap"><div class="epoch-bar" id="epochBar"></div></div>
+      <div class="epoch-txt" id="epochTxt">0 / 0</div>
+      <div class="log-box" id="logBox">
+        <div class="log-line">학습 준비 중...</div>
+      </div>
+      <button class="train-btn" id="trainBtn" onclick="startTraining()" disabled>🧠 학습 시작</button>
+      <button class="model-dl-btn" id="modelDlBtn" onclick="downloadModel()">💾 모델 저장</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ PAGE 3: 인식 ══ -->
+<div class="page" id="page-recog">
+  <div class="recog-layout">
+    <div class="recog-side">
+      <h3>모델 & 결과</h3>
+      <div class="model-load-area" id="modelLoadArea" onclick="document.getElementById('modelInput').click()">
+        <div style="font-size:24px;margin-bottom:6px">🤖</div>
+        <div style="font-size:12px;color:var(--muted)" id="modelLoadTxt">모델 파일 불러오기<br><span style="font-size:10px">(model.json + *.bin)</span></div>
+      </div>
+      <input type="file" id="modelInput" accept=".json,.bin" multiple onchange="loadModelFiles(event)">
+      <div class="recog-word-list" id="recogWordList"></div>
+    </div>
+    <div class="recog-cam">
+      <div class="recog-cam-wrap">
+        <canvas id="canvasR"></canvas>
+        <div class="no-model-msg" id="noModelMsg">
+          <div style="font-size:36px">🤖</div>
+          <div>왼쪽에서 모델을 불러오거나<br>학습 탭에서 학습 후 사용하세요</div>
+        </div>
+        <div class="recog-result">
+          <div class="recog-word-big" id="recogWordBig"></div>
+          <div class="recog-sub" id="recogSub"></div>
+        </div>
+      </div>
+      <div class="recog-hist">
+        <span class="hist-lbl">기록:</span>
+        <div id="histChips" style="display:flex;gap:6px;align-items:center"></div>
+        <button class="hclear" onclick="clearHist()">지우기</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <script>
-// ══════════════════════════════════════════
-// 손가락 분석 유틸
-// ══════════════════════════════════════════
-const TIP  = [0,4,8,12,16,20];
-const MID  = [0,3,6,10,14,18];
-const PIP  = [0,2,5,9,13,17];
-
-function fingerUp(lm, f) {
-  // f: 1=검지 2=중지 3=약지 4=소지
-  return lm[TIP[f]].y < lm[MID[f]].y - 0.025;
-}
-function thumbUp(lm) { return lm[4].y < lm[3].y - 0.02; }
-function thumbDown(lm) { return lm[4].y > lm[3].y + 0.02; }
-function thumbOut(lm) { return Math.abs(lm[4].x - lm[3].x) > 0.06; }
-
-function allFingersUp(lm) {
-  return fingerUp(lm,1)&&fingerUp(lm,2)&&fingerUp(lm,3)&&fingerUp(lm,4);
-}
-function noFingersUp(lm) {
-  return !fingerUp(lm,1)&&!fingerUp(lm,2)&&!fingerUp(lm,3)&&!fingerUp(lm,4);
-}
-function isFist(lm) { return noFingersUp(lm) && !thumbUp(lm); }
-function isOpenPalm(lm) { return allFingersUp(lm) && thumbOut(lm); }
-function isPointing(lm) {
-  return fingerUp(lm,1) && !fingerUp(lm,2) && !fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isPeace(lm) {
-  return fingerUp(lm,1) && fingerUp(lm,2) && !fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isThumbsUp(lm) {
-  return thumbUp(lm) && noFingersUp(lm);
-}
-function isThumbsDown(lm) {
-  return thumbDown(lm) && noFingersUp(lm);
-}
-function isPinch(lm) {
-  const dx = lm[4].x - lm[8].x;
-  const dy = lm[4].y - lm[8].y;
-  return Math.sqrt(dx*dx+dy*dy) < 0.06 && !fingerUp(lm,2) && !fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isThreeFingersUp(lm) {
-  return fingerUp(lm,1)&&fingerUp(lm,2)&&fingerUp(lm,3)&&!fingerUp(lm,4);
-}
-function isFourFingersUp(lm) {
-  return fingerUp(lm,1)&&fingerUp(lm,2)&&fingerUp(lm,3)&&fingerUp(lm,4)&&!thumbOut(lm);
-}
-function isCallMe(lm) { // 엄지+소지
-  return thumbUp(lm) && !fingerUp(lm,1) && !fingerUp(lm,2) && !fingerUp(lm,3) && fingerUp(lm,4);
-}
-function isGun(lm) { // 엄지+검지 L shape
-  return thumbOut(lm) && fingerUp(lm,1) && !fingerUp(lm,2) && !fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isMiddleUp(lm) {
-  return !fingerUp(lm,1) && fingerUp(lm,2) && !fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isRingUp(lm) {
-  return !fingerUp(lm,1) && !fingerUp(lm,2) && fingerUp(lm,3) && !fingerUp(lm,4);
-}
-function isPinkyUp(lm) {
-  return !fingerUp(lm,1) && !fingerUp(lm,2) && !fingerUp(lm,3) && fingerUp(lm,4);
-}
-function isCrossed(lm) {
-  const dx = Math.abs(lm[8].x - lm[12].x);
-  return fingerUp(lm,1) && fingerUp(lm,2) && dx < 0.04;
-}
-
-// 손바닥 방향 (앞/뒤)
-function isPalmFacing(lm) {
-  return lm[5].z < lm[17].z; // 대략적인 팜 방향
-}
-
-// ══════════════════════════════════════════
-// 수화 데이터 (일상 단어, 양손 고려)
-// 각 제스처는 단순화된 단일손 기준이며 설명으로 양손 동작 안내
-// ══════════════════════════════════════════
-const SIGNS = [
-  // ── 음식 ──
-  { cat:'음식', id:'rice',     emoji:'🍚', word:'밥',
-    how:'손가락 모두 오므리기',
-    tip:'손가락을 둥글게 오므려 그릇 모양을 만드세요. 양손을 마주 보게 합니다.',
-    detect: lm => isFist(lm) },
-  { cat:'음식', id:'water',    emoji:'💧', word:'물',
-    how:'검지 W 모양',
-    tip:'검지, 중지, 약지 세 손가락을 펴고 엄지로 소지를 잡으세요. 물 W 표현입니다.',
-    detect: lm => isThreeFingersUp(lm) && !thumbOut(lm) },
-  { cat:'음식', id:'yummy',    emoji:'😋', word:'맛있어',
-    how:'엄지+검지 핀치',
-    tip:'엄지와 검지를 맞닿게 핀치 제스처를 만드세요. "맛있다"는 손끝으로 표현합니다.',
-    detect: lm => isPinch(lm) },
-  { cat:'음식', id:'hungry',   emoji:'🍽️', word:'배고파',
-    how:'손바닥으로 배 쓸기',
-    tip:'손바닥을 펴고 배 앞에서 원을 그리듯 움직이세요. 여기서는 열린 손바닥으로 인식합니다.',
-    detect: lm => isOpenPalm(lm) },
-  { cat:'음식', id:'more',     emoji:'✌️', word:'더 줘',
-    how:'검지+중지 두 번 구부리기',
-    tip:'검지와 중지를 세우고 구부렸다 펴기를 반복하세요.',
-    detect: lm => isPeace(lm) },
-
-  // ── 감정/상태 ──
-  { cat:'감정', id:'good',     emoji:'👍', word:'좋아',
-    how:'엄지 위로',
-    tip:'주먹 쥐고 엄지만 위로 세우세요.',
-    detect: lm => isThumbsUp(lm) },
-  { cat:'감정', id:'bad',      emoji:'👎', word:'싫어',
-    how:'엄지 아래로',
-    tip:'주먹 쥐고 엄지를 아래로 내리세요.',
-    detect: lm => isThumbsDown(lm) },
-  { cat:'감정', id:'tired',    emoji:'😫', word:'피곤해',
-    how:'손 아래로 축 늘어뜨리기',
-    tip:'손목을 아래로 축 늘어뜨리듯 소지를 위로 세우세요.',
-    detect: lm => isPinkyUp(lm) },
-  { cat:'감정', id:'happy',    emoji:'😊', word:'행복해',
-    how:'양손 활짝 + 가슴 위',
-    tip:'손바닥을 펴고 가슴 앞에서 위로 올리세요. 한 손으로는 열린 손바닥 위 포지션입니다.',
-    detect: lm => allFingersUp(lm) && !thumbOut(lm) && lm[9].y < 0.5 },
-  { cat:'감정', id:'love',     emoji:'❤️', word:'사랑해',
-    how:'엄지+검지+소지 펴기',
-    tip:'엄지, 검지, 소지를 펴고 나머지는 접으세요. ILY 제스처입니다.',
-    detect: lm => thumbUp(lm) && fingerUp(lm,1) && !fingerUp(lm,2) && !fingerUp(lm,3) && fingerUp(lm,4) },
-  { cat:'감정', id:'sorry',    emoji:'🙏', word:'미안해',
-    how:'주먹으로 가슴 두드리기',
-    tip:'손을 주먹 쥐고 가슴 앞에 원을 그리듯 움직이세요.',
-    detect: lm => isFist(lm) && lm[9].y < 0.45 },
-  { cat:'감정', id:'thanks',   emoji:'🤲', word:'감사해',
-    how:'손끝을 이마에 갖다 대기',
-    tip:'손끝(검지~중지)을 이마에 댔다가 앞으로 내밉니다.',
-    detect: lm => isPeace(lm) && lm[8].y < 0.3 },
-
-  // ── 학교 ──
-  { cat:'학교', id:'study',    emoji:'📚', word:'공부',
-    how:'책 펼치듯 양손 펴기',
-    tip:'양손을 펼쳐 책처럼 마주 보게 하세요. 한 손으로는 네 손가락을 펴세요.',
-    detect: lm => isFourFingersUp(lm) },
-  { cat:'학교', id:'teacher',  emoji:'👩‍🏫', word:'선생님',
-    how:'검지로 위 가리키기',
-    tip:'검지 하나를 세워 위를 가리키세요. 선생님 = 위에서 가르치는 분.',
-    detect: lm => isPointing(lm) && lm[8].y < 0.35 },
-  { cat:'학교', id:'friend',   emoji:'🤝', word:'친구',
-    how:'검지 두 개 나란히',
-    tip:'두 손의 검지를 나란히 붙이세요. 한 손으로는 검지+중지를 붙여서 표현합니다.',
-    detect: lm => isPeace(lm) && Math.abs(lm[8].x - lm[12].x) < 0.05 },
-  { cat:'학교', id:'school',   emoji:'🏫', word:'학교',
-    how:'양손으로 지붕 모양',
-    tip:'두 손 검지를 맞대 지붕(△) 모양을 만드세요. 한 손은 총 모양(L) 제스처입니다.',
-    detect: lm => isGun(lm) },
-  { cat:'학교', id:'yes',      emoji:'✅', word:'맞아',
-    how:'검지 끄덕이기',
-    tip:'검지를 세우고 앞뒤로 끄덕이세요.',
-    detect: lm => isPointing(lm) && lm[8].y > 0.35 },
-  { cat:'학교', id:'no',       emoji:'❌', word:'아니야',
-    how:'검지 좌우 흔들기',
-    tip:'검지를 세우고 좌우로 흔드세요.',
-    detect: lm => isMiddleUp(lm) },
-
-  // ── 가족 ──
-  { cat:'가족', id:'mom',      emoji:'👩', word:'엄마',
-    how:'엄지로 턱 두드리기',
-    tip:'엄지를 세우고 턱 아래에 두드리세요. 엄마는 턱 쪽 제스처입니다.',
-    detect: lm => isThumbsUp(lm) && lm[4].y > 0.6 },
-  { cat:'가족', id:'dad',      emoji:'👨', word:'아빠',
-    how:'엄지로 이마 두드리기',
-    tip:'엄지를 세우고 이마에 두드리세요. 아빠는 이마 쪽 제스처입니다.',
-    detect: lm => isThumbsUp(lm) && lm[4].y < 0.35 },
-  { cat:'가족', id:'brother',  emoji:'👦', word:'형/오빠',
-    how:'검지로 옆 가리키기',
-    tip:'검지를 옆(수평 방향)으로 펴서 가리키세요.',
-    detect: lm => isPointing(lm) && Math.abs(lm[8].y - lm[5].y) < 0.05 },
-  { cat:'가족', id:'sister',   emoji:'👧', word:'누나/언니',
-    how:'소지 세우기',
-    tip:'소지(새끼손가락)만 세우세요.',
-    detect: lm => isPinkyUp(lm) && lm[20].y < lm[8].y },
-  { cat:'가족', id:'me',       emoji:'👉', word:'나',
-    how:'검지로 자신 가리키기',
-    tip:'검지를 자신의 가슴을 향해 가리키세요.',
-    detect: lm => isPointing(lm) && lm[8].x > 0.3 && lm[8].x < 0.7 },
-  { cat:'가족', id:'call',     emoji:'📞', word:'전화해',
-    how:'엄지+소지 전화기 모양',
-    tip:'엄지와 소지를 펴고 나머지는 접어 전화기 모양을 만드세요.',
-    detect: lm => isCallMe(lm) },
+// ══════════════════════════════════════════════════════
+// 전역 상태
+// ══════════════════════════════════════════════════════
+const TARGET = 100;
+const WORDS = [
+  {id:'rice',emoji:'🍚',word:'밥'},{id:'water',emoji:'💧',word:'물'},
+  {id:'yummy',emoji:'😋',word:'맛있어'},{id:'hungry',emoji:'🍽️',word:'배고파'},
+  {id:'more',emoji:'➕',word:'더 줘'},{id:'good',emoji:'👍',word:'좋아'},
+  {id:'bad',emoji:'👎',word:'싫어'},{id:'tired',emoji:'😫',word:'피곤해'},
+  {id:'happy',emoji:'😊',word:'행복해'},{id:'love',emoji:'❤️',word:'사랑해'},
+  {id:'sorry',emoji:'🙏',word:'미안해'},{id:'thanks',emoji:'🤲',word:'감사해'},
+  {id:'study',emoji:'📚',word:'공부'},{id:'teacher',emoji:'👩‍🏫',word:'선생님'},
+  {id:'friend',emoji:'🤝',word:'친구'},{id:'school',emoji:'🏫',word:'학교'},
+  {id:'yes',emoji:'✅',word:'맞아'},{id:'no',emoji:'❌',word:'아니야'},
+  {id:'mom',emoji:'👩',word:'엄마'},{id:'dad',emoji:'👨',word:'아빠'},
+  {id:'brother',emoji:'👦',word:'형/오빠'},{id:'sister',emoji:'👧',word:'누나/언니'},
+  {id:'me',emoji:'👉',word:'나'},{id:'call',emoji:'📞',word:'전화해'},
 ];
 
-// ══════════════════════════════════════════
-// 상태
-// ══════════════════════════════════════════
+let dataset = {}; WORDS.forEach(w => dataset[w.id] = []);
+let currentWord = null;
 let handsModel = null;
-let stableCounts = {}; // id -> count
-const STABLE = 10;
-let lastShown = null;
-let history = [];
-let focusedId = null;
+let currentLM = null;
+let hasHand = false;
+let autoMode = false;
+let autoTimer = null;
+let tfModel = null;
+let labelMap = []; // index -> word id
+let recogHistory = [];
+let stablePred = null;
+let stableCount = 0;
+let recogActive = false;
+let recogCamera = null;
+let recogVideo = null;
+let recogHands = null;
 
-// ══════════════════════════════════════════
-// UI 렌더
-// ══════════════════════════════════════════
-function renderList() {
-  const list = document.getElementById('signList');
-  const cats = [...new Set(SIGNS.map(s => s.cat))];
-  list.innerHTML = '';
-  cats.forEach(cat => {
-    const div = document.createElement('div');
-    div.className = 'cat-divider';
-    div.textContent = cat;
-    list.appendChild(div);
-    SIGNS.filter(s => s.cat === cat).forEach(s => {
-      const item = document.createElement('div');
-      item.className = 'sign-item';
-      item.id = 'item-' + s.id;
-      item.innerHTML = `
-        <div class="sign-icon">${s.emoji}</div>
-        <div class="sign-info">
-          <div class="sign-word">${s.word}</div>
-          <div class="sign-how">${s.how}</div>
-        </div>
-        <div class="sign-check">✓</div>
-      `;
-      item.onclick = () => focusSign(s.id);
-      list.appendChild(item);
-    });
-  });
+// ══════════════════════════════════════════════════════
+// 탭 전환
+// ══════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'recog' && tfModel && !recogActive) startRecog();
 }
 
-function focusSign(id) {
-  document.querySelectorAll('.sign-item').forEach(e => e.classList.remove('active'));
-  const el = document.getElementById('item-' + id);
-  if (el) { el.classList.add('active'); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
-  const s = SIGNS.find(x => x.id === id);
-  if (s) document.getElementById('tipText').textContent = s.tip;
-  focusedId = id;
+// ══════════════════════════════════════════════════════
+// PAGE 1: 수집
+// ══════════════════════════════════════════════════════
+function renderWordList() {
+  const list = document.getElementById('wordList');
+  list.innerHTML = WORDS.map(w => {
+    const cnt = dataset[w.id].length;
+    return `<button class="wbtn ${cnt>=TARGET?'done':''} ${currentWord?.id===w.id?'active':''}"
+      id="wbtn-${w.id}" onclick="selectWord('${w.id}')">
+      <span class="wemoji">${w.emoji}</span>
+      <span class="wname">${w.word}</span>
+      <span class="wcnt">${cnt}/${TARGET}</span>
+    </button>`;
+  }).join('');
+  const total = WORDS.reduce((s,w) => s+dataset[w.id].length, 0);
+  document.getElementById('totalTxt').textContent = `총 ${total}개`;
+  document.getElementById('dlBtn').disabled = total === 0;
 }
 
-function showResult(sign) {
-  const rw = document.getElementById('resultWord');
-  const rs = document.getElementById('resultSub');
-  rw.textContent = sign.emoji + ' ' + sign.word;
-  rs.textContent = sign.how;
-  rw.classList.add('show');
-  rs.classList.add('show');
-  setTimeout(() => { rw.classList.remove('show'); rs.classList.remove('show'); }, 2200);
-
-  document.querySelectorAll('.sign-item').forEach(e => e.classList.remove('detected'));
-  const el = document.getElementById('item-' + sign.id);
-  if (el) { el.classList.add('detected'); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function selectWord(id) {
+  currentWord = WORDS.find(w => w.id === id);
+  document.getElementById('badgeEmoji').textContent = currentWord.emoji;
+  document.getElementById('badgeWord').textContent = currentWord.word;
+  document.getElementById('badgeHint').textContent = '수화 후 ✊ 버튼';
+  document.getElementById('progWrap').style.opacity = '1';
+  updateProgress();
+  renderWordList();
 }
 
-function addHistory(sign) {
-  history.unshift(sign);
-  if (history.length > 10) history.pop();
-  const el = document.getElementById('histChips');
-  el.innerHTML = history.map(s =>
-    `<div class="hist-chip">${s.emoji} ${s.word}</div>`
-  ).join('');
+function updateProgress() {
+  if (!currentWord) return;
+  const cnt = dataset[currentWord.id].length;
+  const r = 32; const circ = 2*Math.PI*r;
+  document.getElementById('progFill').style.strokeDashoffset = circ*(1 - Math.min(cnt/TARGET,1));
+  document.getElementById('progNum').textContent = cnt;
+  document.getElementById('camInfo').textContent = `${currentWord.word} — ${cnt}개 / ${TARGET-cnt}개 남음`;
+  const btn = document.getElementById('wbtn-'+currentWord.id);
+  if (btn) {
+    btn.querySelector('.wcnt').textContent = `${cnt}/${TARGET}`;
+    if (cnt >= TARGET) btn.classList.add('done'); else btn.classList.remove('done');
+  }
+  const total = WORDS.reduce((s,w)=>s+dataset[w.id].length,0);
+  document.getElementById('totalTxt').textContent = `총 ${total}개`;
+  document.getElementById('dlBtn').disabled = total === 0;
 }
-function clearHist() { history = []; document.getElementById('histChips').innerHTML = ''; }
 
-// ══════════════════════════════════════════
-// MediaPipe
-// ══════════════════════════════════════════
+function captureFrame() {
+  if (!currentWord) { alert('단어를 먼저 선택하세요'); return; }
+  if (!hasHand || !currentLM) { showNoHand(); return; }
+  if (dataset[currentWord.id].length >= TARGET) { showDoneBadge(); return; }
+  const flat = currentLM.map(p => [+p.x.toFixed(4),+p.y.toFixed(4),+p.z.toFixed(4)]);
+  dataset[currentWord.id].push(flat);
+  updateProgress();
+  doFlash();
+  if (dataset[currentWord.id].length >= TARGET) { showDoneBadge(); stopAuto(); }
+}
+
+function undoLast() {
+  if (!currentWord) return;
+  if (dataset[currentWord.id].length > 0) { dataset[currentWord.id].pop(); updateProgress(); }
+}
+
+function doFlash() {
+  const f = document.getElementById('flash'); f.classList.add('pop');
+  setTimeout(()=>f.classList.remove('pop'),110);
+}
+function showDoneBadge() {
+  const d = document.getElementById('doneBadge'); d.classList.add('show');
+  setTimeout(()=>d.classList.remove('show'),1600);
+}
+function showNoHand() {
+  const n = document.getElementById('noHand'); n.classList.add('show');
+  setTimeout(()=>n.classList.remove('show'),1400);
+}
+
+function toggleAuto() {
+  autoMode = !autoMode;
+  document.getElementById('autoToggle').classList.toggle('on', autoMode);
+  if (autoMode) {
+    autoTimer = setInterval(()=>{ if(hasHand&&currentWord&&dataset[currentWord.id].length<TARGET) captureFrame(); }, 550);
+  } else stopAuto();
+}
+function stopAuto() {
+  autoMode = false;
+  document.getElementById('autoToggle').classList.remove('on');
+  clearInterval(autoTimer);
+}
+
+function downloadDataset() {
+  const out = {version:'1.0',date:new Date().toISOString(),words:
+    WORDS.map(w=>({id:w.id,word:w.word,emoji:w.emoji,count:dataset[w.id].length,samples:dataset[w.id]}))
+    .filter(w=>w.count>0)};
+  const blob = new Blob([JSON.stringify(out)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`ksl_data_${new Date().toISOString().slice(0,10)}.json`; a.click();
+}
+
+// MediaPipe (수집용)
 async function initMP() {
-  handsModel = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-  handsModel.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.6 });
-  handsModel.onResults(onResults);
-  document.getElementById('spinner').style.display = 'none';
-  document.getElementById('loadMsg').textContent = '준비 완료!';
-  document.getElementById('startBtn').style.display = 'block';
-  document.getElementById('hintMsg').style.display = 'block';
+  handsModel = new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  handsModel.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.7,minTrackingConfidence:.6});
+  handsModel.onResults(onCollectResults);
+  document.getElementById('spinner').style.display='none';
+  document.getElementById('loadMsg').textContent='준비 완료!';
+  document.getElementById('startBtn').style.display='block';
 }
 
 async function startCamera() {
-  const btn = document.getElementById('startBtn');
-  btn.disabled = true;
-  document.getElementById('loadMsg').textContent = '카메라 연결 중...';
-  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('spinner').style.display='block';
+  document.getElementById('loadMsg').textContent='카메라 연결 중...';
   const video = document.getElementById('videoEl');
   const canvas = document.getElementById('canvasEl');
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: {ideal:1280}, height: {ideal:720} }
-    });
-    video.srcObject = stream;
-    await video.play();
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}}});
+    video.srcObject = stream; await video.play();
+    canvas.width=video.videoWidth||1280; canvas.height=video.videoHeight||720;
     document.getElementById('startOverlay').classList.add('gone');
-    document.getElementById('statusDot').classList.add('on');
-    document.getElementById('statusText').textContent = '인식 중';
-    const cam = new Camera(video, {
-      onFrame: async () => { await handsModel.send({ image: video }); },
-      width: canvas.width, height: canvas.height
-    });
-    cam.start();
+    new Camera(video,{onFrame:async()=>{await handsModel.send({image:video})},width:canvas.width,height:canvas.height}).start();
   } catch(e) {
-    document.getElementById('loadMsg').textContent = '오류: ' + e.message;
-    document.getElementById('spinner').style.display = 'none';
-    btn.disabled = false;
+    document.getElementById('loadMsg').textContent='오류: '+e.message;
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('startBtn').disabled=false;
   }
 }
 
-// ══════════════════════════════════════════
-// 인식 처리
-// ══════════════════════════════════════════
-function onResults(results) {
-  const canvas = document.getElementById('canvasEl');
-  const video = document.getElementById('videoEl');
-  const ctx = canvas.getContext('2d');
-  if (video.videoWidth > 0 && canvas.width !== video.videoWidth) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+function onCollectResults(results) {
+  const canvas=document.getElementById('canvasEl'), video=document.getElementById('videoEl');
+  const ctx=canvas.getContext('2d');
+  if(video.videoWidth>0&&canvas.width!==video.videoWidth){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
+  ctx.save(); ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.scale(-1,1); ctx.translate(-canvas.width,0);
+  ctx.drawImage(results.image,0,0,canvas.width,canvas.height);
+  const hands=results.multiHandLandmarks||[];
+  hasHand=hands.length>0; currentLM=hasHand?hands[0]:null;
+  if(hasHand){
+    drawConnectors(ctx,hands[0],HAND_CONNECTIONS,{color:'rgba(124,109,250,.7)',lineWidth:2});
+    drawLandmarks(ctx,hands[0],{color:'#7c6dfa',fillColor:'rgba(124,109,250,.3)',lineWidth:1,radius:4});
   }
-
-  ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.scale(-1, 1);
-  ctx.translate(-canvas.width, 0);
-  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
   ctx.restore();
+  if(autoMode&&!hasHand) showNoHand();
+}
 
-  const hc = document.getElementById('handCount');
-  const hands = results.multiHandLandmarks || [];
-  const handedness = results.multiHandedness || [];
+// ══════════════════════════════════════════════════════
+// PAGE 2: 학습
+// ══════════════════════════════════════════════════════
+let trainData = null;
 
-  if (hands.length > 0) {
-    hc.classList.add('has-hands');
-    hc.innerHTML = `<div class="hand-dot"></div> 손 ${hands.length}개 감지됨`;
-  } else {
-    hc.classList.remove('has-hands');
-    hc.innerHTML = `<div class="hand-dot"></div> 손을 카메라에 보여주세요`;
-    stableCounts = {};
-    lastShown = null;
+function loadDataFile(e) {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      trainData = JSON.parse(ev.target.result);
+      document.getElementById('uploadArea').classList.add('has-file');
+      document.getElementById('uploadName').textContent = '✅ ' + file.name;
+      showDataStats(trainData);
+      document.getElementById('trainBtn').disabled = false;
+    } catch(err) { alert('JSON 파싱 오류: '+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function useCurrentDataset() {
+  const words = WORDS.filter(w=>dataset[w.id].length>0);
+  if(words.length===0){addLog('수집된 데이터가 없습니다.','warn');return null;}
+  return {words: words.map(w=>({id:w.id,word:w.word,emoji:w.emoji,count:dataset[w.id].length,samples:dataset[w.id]}))};
+}
+
+function showDataStats(data) {
+  const words = data.words.filter(w=>w.count>0);
+  const counts = words.map(w=>w.count);
+  document.getElementById('dataStats').style.display='grid';
+  document.getElementById('statWords').textContent=words.length;
+  document.getElementById('statSamples').textContent=counts.reduce((a,b)=>a+b,0);
+  document.getElementById('statMin').textContent=Math.min(...counts);
+  document.getElementById('statMax').textContent=Math.max(...counts);
+}
+
+function addLog(msg, type='log') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + (type==='log'?'info':type);
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function startTraining() {
+  // 데이터 준비 (파일 또는 현재 수집 데이터)
+  let data = trainData || useCurrentDataset();
+  if (!data) { addLog('데이터가 없습니다. 수집 탭에서 먼저 수화를 수집하세요.','warn'); return; }
+
+  const words = data.words.filter(w=>w.count>=5);
+  if(words.length<2){addLog('최소 2개 단어, 각 5개 이상 샘플 필요','warn');return;}
+
+  showDataStats({words});
+  document.getElementById('trainBtn').disabled=true;
+  document.getElementById('modelDlBtn').style.display='none';
+  addLog(`학습 시작: ${words.length}개 단어, 총 ${words.reduce((s,w)=>s+w.count,0)}개 샘플`,'info');
+
+  const epochs = parseInt(document.getElementById('cfgEpochs').value);
+  const batchSize = parseInt(document.getElementById('cfgBatch').value);
+  const lr = parseFloat(document.getElementById('cfgLr').value);
+  const valSplit = parseFloat(document.getElementById('cfgVal').value);
+
+  // 레이블 맵 저장 (인식탭에서 사용)
+  labelMap = words.map(w=>w.id);
+
+  // 데이터셋 구성
+  const xs = [], ys = [];
+  words.forEach((w,i) => {
+    w.samples.forEach(sample => {
+      // 21개 랜드마크 × 3 = 63차원 평탄화
+      xs.push(sample.flat());
+      ys.push(i);
+    });
+  });
+
+  // 셔플
+  const idx = Array.from({length:xs.length},(_,i)=>i).sort(()=>Math.random()-.5);
+  const xsShuffled = idx.map(i=>xs[i]);
+  const ysShuffled = idx.map(i=>ys[i]);
+
+  const xTensor = tf.tensor2d(xsShuffled);
+  const yTensor = tf.oneHot(tf.tensor1d(ysShuffled,'int32'), words.length);
+
+  // 정규화 (0~1)
+  const xNorm = xTensor.sub(xTensor.min()).div(xTensor.max().sub(xTensor.min()).add(1e-8));
+
+  // 모델 구성
+  tfModel = tf.sequential();
+  tfModel.add(tf.layers.dense({inputShape:[63],units:128,activation:'relu',kernelRegularizer:tf.regularizers.l2({l2:0.001})}));
+  tfModel.add(tf.layers.batchNormalization());
+  tfModel.add(tf.layers.dropout({rate:0.3}));
+  tfModel.add(tf.layers.dense({units:64,activation:'relu'}));
+  tfModel.add(tf.layers.dropout({rate:0.2}));
+  tfModel.add(tf.layers.dense({units:words.length,activation:'softmax'}));
+
+  tfModel.compile({
+    optimizer: tf.train.adam(lr),
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  addLog(`모델 구성 완료: 63 → 128 → 64 → ${words.length}`,'info');
+
+  let bestAcc = 0;
+  await tfModel.fit(xNorm, yTensor, {
+    epochs, batchSize, validationSplit: valSplit,
+    callbacks: {
+      onEpochEnd: async (epoch, logs) => {
+        const pct = ((epoch+1)/epochs*100).toFixed(0);
+        document.getElementById('epochBar').style.width = pct+'%';
+        document.getElementById('epochTxt').textContent = `${epoch+1} / ${epochs}`;
+        if((epoch+1)%10===0 || epoch===0) {
+          const acc = (logs.val_acc??logs.acc)*100;
+          addLog(`Epoch ${epoch+1}: loss=${logs.loss.toFixed(4)}, acc=${((logs.acc??0)*100).toFixed(1)}%, val_acc=${acc.toFixed(1)}%`,'info');
+          if(acc>bestAcc) bestAcc=acc;
+        }
+        await tf.nextFrame();
+      }
+    }
+  });
+
+  addLog(`✅ 학습 완료! 최고 검증 정확도: ${bestAcc.toFixed(1)}%`,'success');
+  document.getElementById('trainBtn').disabled=false;
+  document.getElementById('modelDlBtn').style.display='block';
+
+  // 인식탭에 자동 연동
+  addLog('인식 탭에서 바로 사용 가능합니다 🎉','success');
+  renderRecogWordList();
+
+  xTensor.dispose(); yTensor.dispose(); xNorm.dispose();
+}
+
+async function downloadModel() {
+  if(!tfModel){alert('먼저 학습하세요');return;}
+  // 레이블 맵도 함께 저장
+  localStorage.setItem('ksl_labelmap', JSON.stringify({labelMap, words: labelMap.map(id=>WORDS.find(w=>w.id===id))}));
+  await tfModel.save('downloads://ksl_model');
+  addLog('모델 저장 완료 (ksl_model.json + ksl_model.weights.bin)','success');
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 3: 인식
+// ══════════════════════════════════════════════════════
+async function loadModelFiles(e) {
+  const files = Array.from(e.target.files);
+  const jsonFile = files.find(f=>f.name.endsWith('.json'));
+  if(!jsonFile){alert('.json 파일을 포함해서 선택하세요');return;}
+  try {
+    tfModel = await tf.loadLayersModel(tf.io.browserFiles(files));
+    // 레이블맵 복구
+    const saved = localStorage.getItem('ksl_labelmap');
+    if(saved) {
+      const parsed = JSON.parse(saved);
+      labelMap = parsed.labelMap;
+    }
+    document.getElementById('modelLoadArea').classList.add('loaded');
+    document.getElementById('modelLoadTxt').textContent = '✅ 모델 로드 완료';
+    document.getElementById('noModelMsg').style.display='none';
+    renderRecogWordList();
+    startRecog();
+  } catch(err) { alert('모델 로드 오류: '+err.message); }
+}
+
+function renderRecogWordList() {
+  const list = document.getElementById('recogWordList');
+  if(!labelMap.length){list.innerHTML='<div style="font-size:11px;color:var(--muted);text-align:center;padding-top:20px">모델 없음</div>';return;}
+  list.innerHTML = labelMap.map(id=>{
+    const w = WORDS.find(x=>x.id===id)||{emoji:'?',word:id};
+    return `<div class="rwitem" id="rw-${id}">
+      <span style="font-size:14px">${w.emoji}</span>
+      <span style="font-size:12px;font-weight:600;width:60px">${w.word}</span>
+      <div class="rw-bar-wrap"><div class="rw-bar" id="rwbar-${id}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+async function startRecog() {
+  if(!tfModel){
+    document.getElementById('noModelMsg').style.display='flex';
     return;
   }
+  document.getElementById('noModelMsg').style.display='none';
+  recogActive = true;
 
-  // 모든 손 랜드마크 그리기
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.translate(-canvas.width, 0);
-  hands.forEach((lm, i) => {
-    const isRight = handedness[i]?.label === 'Right';
-    const color = isRight ? '#e8532a' : '#2a6ee8';
-    drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: color + '88', lineWidth: 2 });
-    drawLandmarks(ctx, lm, { color, fillColor: color + '44', lineWidth: 1, radius: 4 });
-
-    // 손 라벨 (L/R) - 손목 위치에
-    const wrist = lm[0];
-    const cx = wrist.x * canvas.width;
-    const cy = wrist.y * canvas.height;
-    ctx.fillStyle = color;
-    ctx.font = 'bold 13px DM Mono, monospace';
-    ctx.fillRect(cx - 14, cy - 30, 28, 20);
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center';
-    ctx.fillText(isRight ? '오른손' : '왼손', cx, cy - 16);
-    ctx.textAlign = 'left';
-  });
-  ctx.restore();
-
-  // 인식: 모든 손에 대해 체크 (첫 번째 매치 우선)
-  let detected = null;
-  for (const lm of hands) {
-    for (const sign of SIGNS) {
-      try {
-        if (sign.detect(lm)) {
-          detected = sign;
-          break;
-        }
-      } catch(e) {}
-    }
-    if (detected) break;
+  if(!recogVideo) {
+    recogVideo = document.createElement('video');
+    recogVideo.setAttribute('playsinline','');
+    recogVideo.setAttribute('autoplay','');
+    recogVideo.muted = true;
   }
+  const canvas = document.getElementById('canvasR');
 
-  if (detected) {
-    const id = detected.id;
-    stableCounts[id] = (stableCounts[id] || 0) + 1;
-    // 다른 제스처 카운트 리셋
-    Object.keys(stableCounts).forEach(k => { if (k !== id) stableCounts[k] = 0; });
+  recogHands = new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  recogHands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.7,minTrackingConfidence:.6});
+  recogHands.onResults(onRecogResults);
 
-    if (stableCounts[id] === STABLE) {
-      showResult(detected);
-      if (lastShown !== id) { addHistory(detected); lastShown = id; }
-    }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}}});
+    recogVideo.srcObject=stream; await recogVideo.play();
+    canvas.width=recogVideo.videoWidth||1280; canvas.height=recogVideo.videoHeight||720;
+    recogCamera = new Camera(recogVideo,{
+      onFrame:async()=>{await recogHands.send({image:recogVideo})},
+      width:canvas.width,height:canvas.height
+    });
+    recogCamera.start();
+  } catch(e) { alert('카메라 오류: '+e.message); }
+}
+
+async function onRecogResults(results) {
+  const canvas=document.getElementById('canvasR');
+  if(!recogVideo||!canvas) return;
+  if(recogVideo.videoWidth>0&&canvas.width!==recogVideo.videoWidth){
+    canvas.width=recogVideo.videoWidth; canvas.height=recogVideo.videoHeight;
+  }
+  const ctx=canvas.getContext('2d');
+  ctx.save(); ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.scale(-1,1); ctx.translate(-canvas.width,0);
+  ctx.drawImage(results.image,0,0,canvas.width,canvas.height);
+  const hands=results.multiHandLandmarks||[];
+  if(hands.length>0){
+    drawConnectors(ctx,hands[0],HAND_CONNECTIONS,{color:'rgba(61,214,140,.6)',lineWidth:2});
+    drawLandmarks(ctx,hands[0],{color:'#3dd68c',fillColor:'rgba(61,214,140,.25)',lineWidth:1,radius:4});
+    ctx.restore();
+    await predict(hands[0]);
   } else {
-    stableCounts = {};
-    lastShown = null;
+    ctx.restore();
+    stableCount=0; stablePred=null;
+    // 바 초기화
+    labelMap.forEach(id=>{const b=document.getElementById('rwbar-'+id);if(b)b.style.width='0%';});
+    document.querySelectorAll('.rwitem').forEach(e=>e.classList.remove('highlight'));
   }
 }
 
-// ══════════════════════════════════════════
+async function predict(lm) {
+  if(!tfModel||!labelMap.length) return;
+  const flat = lm.map(p=>[+p.x.toFixed(4),+p.y.toFixed(4),+p.z.toFixed(4)]).flat();
+  const xTensor = tf.tensor2d([flat]);
+  const xMin=xTensor.min(), xMax=xTensor.max();
+  const xNorm=xTensor.sub(xMin).div(xMax.sub(xMin).add(1e-8));
+  const pred = tfModel.predict(xNorm);
+  const probs = await pred.data();
+  xTensor.dispose(); xNorm.dispose(); pred.dispose(); xMin.dispose(); xMax.dispose();
+
+  // 바 업데이트
+  labelMap.forEach((id,i)=>{
+    const b=document.getElementById('rwbar-'+id);
+    if(b) b.style.width=(probs[i]*100).toFixed(1)+'%';
+    const row=document.getElementById('rw-'+id);
+    if(row) row.classList.remove('highlight');
+  });
+
+  const topIdx=Array.from(probs).indexOf(Math.max(...probs));
+  const topId=labelMap[topIdx];
+  const topProb=probs[topIdx];
+  const row=document.getElementById('rw-'+topId);
+  if(row) row.classList.add('highlight');
+
+  // 안정적 인식 (7프레임 + 신뢰도 60%+)
+  if(topProb>0.6){
+    if(topId===stablePred) stableCount++;
+    else {stablePred=topId;stableCount=1;}
+    if(stableCount===7){
+      const w=WORDS.find(x=>x.id===topId)||{emoji:'?',word:topId};
+      showRecogResult(w, topProb);
+    }
+  } else {stablePred=null;stableCount=0;}
+}
+
+function showRecogResult(w, prob) {
+  const rw=document.getElementById('recogWordBig');
+  const rs=document.getElementById('recogSub');
+  rw.textContent=w.emoji+' '+w.word;
+  rs.textContent=`${(prob*100).toFixed(0)}% 신뢰도`;
+  rw.classList.add('show'); rs.classList.add('show');
+  setTimeout(()=>{rw.classList.remove('show');rs.classList.remove('show');},2000);
+  recogHistory.unshift(w);
+  if(recogHistory.length>8) recogHistory.pop();
+  document.getElementById('histChips').innerHTML=recogHistory.map(x=>`<div class="hchip">${x.emoji} ${x.word}</div>`).join('');
+}
+
+function clearHist(){recogHistory=[];document.getElementById('histChips').innerHTML='';}
+
+// ══════════════════════════════════════════════════════
 // 실행
-// ══════════════════════════════════════════
-renderList();
+// ══════════════════════════════════════════════════════
+renderWordList();
 initMP();
+
+// 학습 탭: 현재 데이터 사용 버튼 자동 활성화 체크
+setInterval(()=>{
+  const total=WORDS.reduce((s,w)=>s+dataset[w.id].length,0);
+  const btn=document.getElementById('trainBtn');
+  if(btn&&!trainData&&total>=10) btn.disabled=false;
+  else if(btn&&!trainData&&total<10) btn.disabled=true;
+},1000);
 </script>
 </body>
 </html>
