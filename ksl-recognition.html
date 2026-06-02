@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>한국 수화 인식기</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --panel: #111118;
+    --card: #18181f;
+    --border: #2a2a3a;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --success: #43e97b;
+    --warn: #ffd166;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  header .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--warn);
+    animation: pulse 1.5s infinite;
+  }
+  .status-dot.active { background: var(--success); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── 메인 레이아웃 ── */
+  main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── 왼쪽 가이드 패널 ── */
+  .guide-panel {
+    width: 280px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .guide-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .guide-header h2 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .category-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .cat-btn {
+    flex: 1;
+    padding: 6px 4px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .cat-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .sign-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-content: start;
+  }
+  .sign-grid::-webkit-scrollbar { width: 4px; }
+  .sign-grid::-webkit-scrollbar-track { background: transparent; }
+  .sign-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sign-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .sign-card:hover, .sign-card.focused {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(108,99,255,0.2);
+  }
+  .sign-card.detected {
+    border-color: var(--success);
+    background: rgba(67,233,123,0.08);
+    animation: detectPop 0.4s ease;
+  }
+  @keyframes detectPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  .sign-emoji {
+    font-size: 32px;
+    margin-bottom: 4px;
+    display: block;
+    line-height: 1;
+  }
+  .sign-hand {
+    font-size: 28px;
+    margin-bottom: 4px;
+    display: block;
+    line-height: 1;
+  }
+  .sign-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    display: block;
+  }
+  .sign-desc {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .sign-badge {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .sign-card.detected .sign-badge { opacity: 1; }
+
+  /* ── 오른쪽 캠 영역 ── */
+  .cam-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .cam-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #050508;
+  }
+
+  #videoEl {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #canvasEl {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transform: scaleX(-1);
+  }
+
+  .cam-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+
+  /* 인식 결과 오버레이 */
+  .result-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .detected-label {
+    font-size: 48px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 0 30px var(--accent);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  .detected-label.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .confidence-bar-wrap {
+    width: 200px;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .confidence-bar-wrap.show { opacity: 1; }
+  .confidence-bar {
+    height: 100%;
+    background: var(--success);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .conf-text {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* 코너 가이드라인 */
+  .corner-guide {
+    position: absolute;
+    inset: 40px;
+    pointer-events: none;
+  }
+  .corner-guide::before, .corner-guide::after,
+  .corner-inner::before, .corner-inner::after {
+    content: '';
+    position: absolute;
+    width: 30px; height: 30px;
+    border-color: rgba(108,99,255,0.5);
+    border-style: solid;
+  }
+  .corner-guide::before { top: 0; left: 0; border-width: 2px 0 0 2px; }
+  .corner-guide::after { top: 0; right: 0; border-width: 2px 2px 0 0; }
+  .corner-inner::before { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+  .corner-inner::after { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+  /* 손 감지 표시 */
+  .hand-indicator {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+  .hand-indicator.detected-hand {
+    border-color: var(--success);
+    color: var(--success);
+  }
+  .hand-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .hand-indicator.detected-hand .hand-dot {
+    background: var(--success);
+  }
+
+  /* 캠 시작 버튼 */
+  .start-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(5,5,8,0.9);
+    z-index: 10;
+  }
+  .start-overlay.hidden { display: none; }
+
+  .start-btn {
+    padding: 16px 40px;
+    background: var(--accent);
+    border: none;
+    border-radius: 16px;
+    color: white;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 8px 32px rgba(108,99,255,0.4);
+  }
+  .start-btn:active { transform: scale(0.97); }
+  .start-overlay p {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* 하단 결과 히스토리 */
+  .history-bar {
+    height: 52px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+  .history-bar::-webkit-scrollbar { height: 0; }
+  .history-label {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .history-item {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .clear-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+  }
+
+  /* 로딩 상태 */
+  .loading-text {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 상세 팁 패널 */
+  .tip-panel {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tip-title {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 6px;
+  }
+  .tip-content {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.6;
+    transition: all 0.3s;
+  }
+
+  @media (max-width: 600px) {
+    .guide-panel { width: 200px; }
+    .sign-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✋ KSL.ai</div>
+  <span style="font-size:13px;color:var(--muted)">한국 수화 인식기</span>
+  <div id="statusDot" class="status-dot" style="margin-left:auto"></div>
+  <span id="statusText" class="subtitle">준비 중</span>
+</header>
+
+<main>
+  <!-- 왼쪽: 수화 가이드 -->
+  <div class="guide-panel">
+    <div class="guide-header">
+      <h2>📖 수화 가이드</h2>
+    </div>
+
+    <div class="category-tabs">
+      <button class="cat-btn active" onclick="setCategory('numbers')">숫자</button>
+      <button class="cat-btn" onclick="setCategory('greetings')">인사</button>
+      <button class="cat-btn" onclick="setCategory('emotions')">감정</button>
+    </div>
+
+    <div class="sign-grid" id="signGrid"></div>
+
+    <div class="tip-panel">
+      <div class="tip-title">💡 현재 선택</div>
+      <div class="tip-content" id="tipContent">수화 카드를 눌러 자세한 설명을 확인하세요.</div>
+    </div>
+  </div>
+
+  <!-- 오른쪽: 카메라 -->
+  <div class="cam-area">
+    <div class="cam-wrapper">
+      <video id="videoEl" playsinline autoplay muted></video>
+      <canvas id="canvasEl"></canvas>
+
+      <div class="corner-guide"><div class="corner-inner"></div></div>
+
+      <div id="handIndicator" class="hand-indicator">
+        <div class="hand-dot"></div>
+        손을 화면에 보여주세요
+      </div>
+
+      <div class="result-overlay">
+        <div id="detectedLabel" class="detected-label"></div>
+        <div id="confBarWrap" class="confidence-bar-wrap">
+          <div id="confBar" class="confidence-bar" style="width:0%"></div>
+        </div>
+        <div id="confText" class="conf-text"></div>
+      </div>
+
+      <!-- 시작 오버레이 -->
+      <div class="start-overlay" id="startOverlay">
+        <div class="spinner" id="loadingSpinner"></div>
+        <p class="loading-text" id="loadingMsg">MediaPipe 로딩 중...</p>
+        <button class="start-btn" id="startBtn" style="display:none" onclick="startCamera()">
+          📷 카메라 시작
+        </button>
+        <p id="loadingHint" style="display:none;font-size:12px;color:var(--muted)">카메라 권한을 허용해 주세요</p>
+      </div>
+    </div>
+
+    <div class="history-bar">
+      <span class="history-label">인식 기록:</span>
+      <div id="historyItems" style="display:flex;gap:8px;align-items:center;"></div>
+      <button class="clear-btn" onclick="clearHistory()">지우기</button>
+    </div>
+  </div>
+</main>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ════════════════════════════════════════════
+// 수화 데이터 정의
+// ════════════════════════════════════════════
+const SIGNS = {
+  numbers: [
+    {
+      id: 'one', label: '1', emoji: '☝️',
+      desc: '검지손가락만 펴기',
+      tip: '주먹을 쥐고 검지(2번째 손가락)만 위로 펴세요. 나머지 손가락은 모두 접습니다.',
+      detect: (lm) => isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4)
+    },
+    {
+      id: 'two', label: '2', emoji: '✌️',
+      desc: '검지 + 중지 펴기',
+      tip: '검지와 중지(2,3번째)를 함께 펴고 나머지는 접으세요. V 모양을 만듭니다.',
+      detect: (lm) => isFingerUp(lm,1) && isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4)
+    },
+    {
+      id: 'three', label: '3', emoji: '🤟',
+      desc: '검지+중지+약지 펴기',
+      tip: '검지, 중지, 약지 세 손가락을 함께 펴세요.',
+      detect: (lm) => isFingerUp(lm,1) && isFingerUp(lm,2) && isFingerUp(lm,3) && !isFingerUp(lm,4)
+    },
+    {
+      id: 'four', label: '4', emoji: '🖖',
+      desc: '엄지 빼고 모두 펴기',
+      tip: '엄지손가락만 접고 나머지 4개를 모두 펴세요.',
+      detect: (lm) => isFingerUp(lm,1) && isFingerUp(lm,2) && isFingerUp(lm,3) && isFingerUp(lm,4) && !isThumbUp(lm)
+    },
+    {
+      id: 'five', label: '5', emoji: '🖐️',
+      desc: '손 전체 펴기',
+      tip: '모든 손가락을 활짝 펴세요. 엄지도 옆으로 벌립니다.',
+      detect: (lm) => isFingerUp(lm,1) && isFingerUp(lm,2) && isFingerUp(lm,3) && isFingerUp(lm,4) && isThumbUp(lm)
+    },
+    {
+      id: 'zero', label: '0', emoji: '👌',
+      desc: '손가락 모두 접어 O 모양',
+      tip: '모든 손가락을 구부려 동그라미(O) 모양을 만드세요.',
+      detect: (lm) => !isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4) && !isThumbUp(lm)
+    },
+  ],
+  greetings: [
+    {
+      id: 'hello', label: '안녕', emoji: '👋',
+      desc: '손 흔들기',
+      tip: '손바닥을 펴고 좌우로 흔드세요. 모든 손가락을 편 채로 손목을 흔드는 동작입니다.',
+      detect: (lm) => isOpenPalm(lm)
+    },
+    {
+      id: 'thanks', label: '감사', emoji: '🙏',
+      desc: '손 모아 인사',
+      tip: '두 손을 모아 합장 자세를 취하고 고개를 숙입니다. 한 손으로는 검지와 중지를 세운 채 이마에 댑니다.',
+      detect: (lm) => isFingerUp(lm,1) && isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4) && isTouchingForehead(lm)
+    },
+    {
+      id: 'yes', label: '예', emoji: '👍',
+      desc: '엄지 위로',
+      tip: '주먹을 쥐고 엄지손가락만 위로 세우세요.',
+      detect: (lm) => isThumbUp(lm) && !isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4)
+    },
+    {
+      id: 'no', label: '아니요', emoji: '👎',
+      desc: '엄지 아래로',
+      tip: '주먹을 쥐고 엄지손가락을 아래로 내리세요.',
+      detect: (lm) => isThumbDown(lm) && !isFingerUp(lm,1) && !isFingerUp(lm,2)
+    },
+    {
+      id: 'good', label: '좋아요', emoji: '🤙',
+      desc: '소지+엄지 펴기',
+      tip: '엄지와 새끼손가락만 펴고 나머지는 접으세요 (shaka/전화 제스처).',
+      detect: (lm) => isThumbUp(lm) && !isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && isFingerUp(lm,4)
+    },
+    {
+      id: 'sorry', label: '미안', emoji: '😔',
+      desc: '주먹으로 가슴 두드리기',
+      tip: '손을 주먹 쥐고 가슴 앞에 갖다 댑니다. 여기서는 주먹 자세를 인식합니다.',
+      detect: (lm) => isFist(lm)
+    },
+  ],
+  emotions: [
+    {
+      id: 'love', label: '사랑', emoji: '🤞',
+      desc: '검지+중지 교차',
+      tip: '검지와 중지를 X자로 교차하세요.',
+      detect: (lm) => isCrossedFingers(lm)
+    },
+    {
+      id: 'happy', label: '행복', emoji: '😊',
+      desc: '양손 엄지 위로',
+      tip: '두 엄지를 동시에 위로 세우세요. 한 손 인식에서는 엄지 세우기입니다.',
+      detect: (lm) => isThumbUp(lm) && !isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4)
+    },
+    {
+      id: 'sad', label: '슬픔', emoji: '😢',
+      desc: '검지로 눈물 표현',
+      tip: '검지를 세워 눈 아래쪽에서 아래로 내리는 동작입니다.',
+      detect: (lm) => isPointing(lm)
+    },
+    {
+      id: 'surprised', label: '놀람', emoji: '😲',
+      desc: '손 활짝 벌리기',
+      tip: '두 손을 활짝 벌려 앞으로 내밉니다. 놀란 표정과 함께 합니다.',
+      detect: (lm) => isSpreadHand(lm)
+    },
+  ]
+};
+
+// ════════════════════════════════════════════
+// 손가락 분석 유틸
+// ════════════════════════════════════════════
+function isFingerUp(lm, finger) {
+  // finger: 1=검지,2=중지,3=약지,4=소지
+  const tips  = [0,8,12,16,20];
+  const mids  = [0,6,10,14,18];
+  return lm[tips[finger]].y < lm[mids[finger]].y - 0.02;
+}
+function isThumbUp(lm) {
+  return lm[4].y < lm[3].y - 0.02;
+}
+function isThumbDown(lm) {
+  return lm[4].y > lm[3].y + 0.02;
+}
+function isFist(lm) {
+  return !isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4);
+}
+function isOpenPalm(lm) {
+  return isFingerUp(lm,1) && isFingerUp(lm,2) && isFingerUp(lm,3) && isFingerUp(lm,4);
+}
+function isSpreadHand(lm) {
+  return isOpenPalm(lm) && isThumbUp(lm);
+}
+function isPointing(lm) {
+  return isFingerUp(lm,1) && !isFingerUp(lm,2) && !isFingerUp(lm,3) && !isFingerUp(lm,4);
+}
+function isCrossedFingers(lm) {
+  const idx1 = lm[8]; const idx2 = lm[12];
+  const dx = Math.abs(idx1.x - idx2.x);
+  return isFingerUp(lm,1) && isFingerUp(lm,2) && dx < 0.04;
+}
+function isTouchingForehead(lm) {
+  // 손가락 끝이 화면 상단 20% 위치
+  return lm[8].y < 0.25;
+}
+
+// ════════════════════════════════════════════
+// 상태
+// ════════════════════════════════════════════
+let currentCategory = 'numbers';
+let hands = null;
+let camera = null;
+let canvasCtx = null;
+let lastDetected = null;
+let detectionHistory = [];
+let stableCount = 0;
+let stableSign = null;
+const STABLE_FRAMES = 8;
+
+// ════════════════════════════════════════════
+// UI 초기화
+// ════════════════════════════════════════════
+function setCategory(cat) {
+  currentCategory = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderGrid();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('signGrid');
+  const signs = SIGNS[currentCategory];
+  grid.innerHTML = signs.map(s => `
+    <div class="sign-card" id="card-${s.id}" onclick="focusSign('${s.id}')">
+      <span class="sign-hand">${s.emoji}</span>
+      <span class="sign-label">${s.label}</span>
+      <span class="sign-desc">${s.desc}</span>
+      <div class="sign-badge"></div>
+    </div>
+  `).join('');
+}
+
+function focusSign(id) {
+  document.querySelectorAll('.sign-card').forEach(c => c.classList.remove('focused'));
+  const card = document.getElementById('card-' + id);
+  if (card) card.classList.add('focused');
+  const all = Object.values(SIGNS).flat();
+  const sign = all.find(s => s.id === id);
+  if (sign) {
+    document.getElementById('tipContent').textContent = sign.tip;
+  }
+}
+
+function showDetected(sign, confidence) {
+  const label = document.getElementById('detectedLabel');
+  const barWrap = document.getElementById('confBarWrap');
+  const bar = document.getElementById('confBar');
+  const confText = document.getElementById('confText');
+
+  label.textContent = sign.emoji + ' ' + sign.label;
+  label.classList.add('show');
+  barWrap.classList.add('show');
+  bar.style.width = (confidence * 100) + '%';
+  confText.textContent = Math.round(confidence * 100) + '% 확신';
+
+  // 카드 하이라이트
+  document.querySelectorAll('.sign-card').forEach(c => c.classList.remove('detected'));
+  const card = document.getElementById('card-' + sign.id);
+  if (card) {
+    card.classList.add('detected');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  setTimeout(() => {
+    label.classList.remove('show');
+    barWrap.classList.remove('show');
+  }, 2000);
+}
+
+function addHistory(sign) {
+  detectionHistory.unshift(sign);
+  if (detectionHistory.length > 8) detectionHistory.pop();
+  const el = document.getElementById('historyItems');
+  el.innerHTML = detectionHistory.map(s =>
+    `<div class="history-item">${s.emoji} ${s.label}</div>`
+  ).join('');
+}
+
+function clearHistory() {
+  detectionHistory = [];
+  document.getElementById('historyItems').innerHTML = '';
+}
+
+// ════════════════════════════════════════════
+// MediaPipe 초기화
+// ════════════════════════════════════════════
+async function initMediaPipe() {
+  hands = new Hands({locateFile: file =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+  });
+
+  hands.onResults(onResults);
+
+  document.getElementById('loadingMsg').textContent = '로딩 완료! 카메라를 시작하세요';
+  document.getElementById('loadingSpinner').style.display = 'none';
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('loadingHint').style.display = 'block';
+}
+
+async function startCamera() {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('loadingMsg').textContent = '카메라 권한 요청 중...';
+  document.getElementById('loadingSpinner').style.display = 'block';
+
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  canvasCtx = canvas.getContext('2d');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+
+    document.getElementById('startOverlay').classList.add('hidden');
+    document.getElementById('statusDot').classList.add('active');
+    document.getElementById('statusText').textContent = '인식 중';
+
+    camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: canvas.width,
+      height: canvas.height
+    });
+    camera.start();
+  } catch(e) {
+    document.getElementById('loadingMsg').textContent = '카메라 오류: ' + e.message;
+    document.getElementById('loadingSpinner').style.display = 'none';
+    document.getElementById('startBtn').disabled = false;
+  }
+}
+
+// ════════════════════════════════════════════
+// 인식 처리
+// ════════════════════════════════════════════
+function onResults(results) {
+  const canvas = document.getElementById('canvasEl');
+  const video = document.getElementById('videoEl');
+  canvasCtx = canvas.getContext('2d');
+
+  // 캔버스 크기 맞추기
+  if (canvas.width !== video.videoWidth && video.videoWidth > 0) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  }
+
+  canvasCtx.save();
+  canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 비디오 그리기 (좌우반전)
+  canvasCtx.scale(-1, 1);
+  canvasCtx.translate(-canvas.width, 0);
+  canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+  canvasCtx.restore();
+
+  const indicator = document.getElementById('handIndicator');
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    indicator.classList.add('detected-hand');
+    indicator.innerHTML = '<div class="hand-dot"></div> 손 감지됨';
+
+    const lm = results.multiHandLandmarks[0];
+
+    // 랜드마크 그리기 (좌우반전 보정)
+    canvasCtx.save();
+    canvasCtx.scale(-1, 1);
+    canvasCtx.translate(-canvas.width, 0);
+
+    // 연결선
+    drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {
+      color: 'rgba(108,99,255,0.6)', lineWidth: 2
+    });
+    // 포인트
+    drawLandmarks(canvasCtx, lm, {
+      color: '#6c63ff', fillColor: 'rgba(108,99,255,0.3)',
+      lineWidth: 1, radius: 4
+    });
+    canvasCtx.restore();
+
+    // 수화 인식
+    recognizeSign(lm);
+  } else {
+    indicator.classList.remove('detected-hand');
+    indicator.innerHTML = '<div class="hand-dot"></div> 손을 화면에 보여주세요';
+    stableCount = 0;
+    stableSign = null;
+  }
+}
+
+function recognizeSign(lm) {
+  const signs = SIGNS[currentCategory];
+  let detected = null;
+
+  for (const sign of signs) {
+    try {
+      if (sign.detect(lm)) {
+        detected = sign;
+        break;
+      }
+    } catch(e) {}
+  }
+
+  if (detected) {
+    if (detected.id === stableSign) {
+      stableCount++;
+    } else {
+      stableSign = detected.id;
+      stableCount = 1;
+    }
+
+    if (stableCount === STABLE_FRAMES) {
+      // 안정적으로 인식됨
+      const confidence = Math.min(0.95, 0.7 + stableCount * 0.01);
+      showDetected(detected, confidence);
+      if (lastDetected !== detected.id) {
+        addHistory(detected);
+        lastDetected = detected.id;
+      }
+    }
+  } else {
+    stableCount = 0;
+    stableSign = null;
+    if (lastDetected) lastDetected = null;
+  }
+}
+
+// ════════════════════════════════════════════
+// 실행
+// ════════════════════════════════════════════
+renderGrid();
+initMediaPipe();
+</script>
+</body>
+</html>
